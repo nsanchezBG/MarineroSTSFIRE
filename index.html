@@ -491,7 +491,7 @@
                                 <input type="text" value={regForm.name} onChange={(e) => setRegForm(p => ({ ...p, name: e.target.value }))} className="mt-1 p-2 border-2 border-brandBlue bg-white text-slate-800 focus:outline-none focus:border-brandRed" required disabled={isSaving} />
                             </label>
                             <label className="flex flex-col text-sm font-bold text-slate-800">
-                                Documento de Identidad (DNI/Cédula):
+                                Documento de Identidad (DNI/CE):
                                 <input type="text" value={regForm.documentId} onChange={(e) => setRegForm(p => ({ ...p, documentId: e.target.value }))} className="mt-1 p-2 border-2 border-brandBlue bg-white text-slate-800 focus:outline-none focus:border-brandRed" required disabled={isSaving} />
                             </label>
                             {regError && <p className="text-brandRed text-sm font-bold mt-2 animate-pulse">{regError}</p>}
