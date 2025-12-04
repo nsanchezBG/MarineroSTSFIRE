@@ -54,7 +54,8 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // Imports de Firestore actualizados: Añadimos collection, addDoc, y query para el Leaderboard
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, addDoc, query, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         // Log Level Debug para ver los logs de Firestore
@@ -70,7 +71,11 @@
             doc,
             getDoc,
             setDoc,
-            onSnapshot
+            onSnapshot,
+            collection, // Nuevo
+            addDoc,     // Nuevo
+            query,      // Nuevo
+            limit       // Nuevo
         };
     </script>
 
@@ -158,7 +163,8 @@
     <script type="text/babel" data-type="module">
         import React, { useState, useEffect, useRef, useCallback } from 'react';
         import { createRoot } from 'react-dom/client';
-        import { Trash2, Award, Play, RotateCcw, ChevronLeft, ChevronRight, ArrowUp, Skull, Lock, Gamepad2, Move, UserPlus, Save } from 'lucide-react';
+        // Añadimos Tally3 para el Leaderboard
+        import { Trash2, Award, Play, RotateCcw, ChevronLeft, ChevronRight, ArrowUp, Skull, Gamepad2, Move, UserPlus, Save, Tally3, X } from 'lucide-react';
 
         // Variables globales proporcionadas por el entorno de Canvas
         
@@ -176,7 +182,7 @@
             storageBucket: "marinero-sts.firebasestorage.app", 
             messagingSenderId: "818191028982", 
             appId: "1:818191028982:web:c91f28bcf43c4bc14692d7", 
-            measurementId: "G-SHSF8X0KGP" // Nuevo ID de GA4
+            measurementId: "G-SHSF8X0KGP" 
         };
 
         // 3. Token de autenticación inicial (No se puede proporcionar manualmente, debe ser null)
@@ -592,7 +598,7 @@
                             <button type="submit" disabled={isSaving || !authReady} className="btn-pixel-wrapper w-full group active:translate-y-1 transition-transform mt-4">
                                 <div className="bg-brandBlue p-1 pixel-clip shadow-[4px_4px_0px_0px_#1e293b] flex items-center justify-center">
                                     <div className="pixel-inner bg-brandBlueLight w-full py-3 text-white font-bold text-xl pixel-clip flex items-center justify-center gap-3 group-hover:bg-blue-400">
-                                        {isSaving ? 'GUARDANDO...' : <><Save className="w-6 h-6" />GUARDAR</>}
+                                        {isSaving ? 'GUARDANDO...' : <><Save className="w-6 h-6 mr-1" />GUARDAR</>}
                                     </div>
                                 </div>
                             </button>
@@ -601,6 +607,47 @@
                 </div>
             </div>
         );
+        
+        // --- NUEVO COMPONENTE MODAL: LEADERBOARD ---
+        const LeaderboardModalComponent = ({ data, onClose, isLoading }) => {
+            
+            // Ordenar los datos: por puntuación (desc), luego por fecha (asc)
+            const sortedData = [...data].sort((a, b) => {
+                if (b.score !== a.score) {
+                    return b.score - a.score;
+                }
+                return new Date(a.date) - new Date(b.date);
+            }).slice(0, 10); // Mostrar solo el Top 10
+
+            return (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div className="w-full max-w-sm bg-brandYellow p-2 pixel-clip shadow-[8px_8px_0px_0px_rgba(0,0,0,0.8)]">
+                        <div className="bg-white p-4 pixel-clip border-4 border-brandRed">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-3xl text-brandRed font-bold text-shadow-retro flex items-center gap-3"><Tally3 className="w-6 h-6"/>MEJORES PUNTUACIONES</h3>
+                                <button onClick={onClose} className="text-brandRed hover:text-red-700 bg-brandYellow/50 p-1 pixel-clip shadow-[2px_2px_0px_0px_#7f1d1d]"><X className="w-6 h-6"/></button>
+                            </div>
+                            
+                            {isLoading ? (
+                                <p className="text-center text-slate-600 font-bold animate-pulse">Cargando puntuaciones...</p>
+                            ) : sortedData.length === 0 ? (
+                                <p className="text-center text-slate-600 font-bold">¡Sé el primero en limpiar el mar y aparecer en el ranking!</p>
+                            ) : (
+                                <div className="space-y-2">
+                                    {sortedData.map((item, index) => (
+                                        <div key={item.id} className={`flex justify-between items-center p-3 pixel-clip ${index === 0 ? 'bg-brandYellow border-2 border-brandRed' : index === 1 ? 'bg-yellow-200' : index === 2 ? 'bg-yellow-100' : 'bg-slate-100'}`}>
+                                            <span className="font-extrabold text-brandBlue text-2xl w-8 text-left">{index + 1}.</span>
+                                            <span className="font-bold text-slate-800 text-lg flex-1 truncate ml-2">{item.name}</span>
+                                            <span className="font-extrabold text-brandRed text-3xl">{item.score}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
 
 
         const App = () => {
@@ -621,6 +668,12 @@
             const [userId, setUserId] = useState(null);
             const [isRegistered, setIsRegistered] = useState(false);
             const [showRegistrationModal, setShowRegistrationModal] = useState(false);
+            // ESTADO DEL LEADERBOARD
+            const [leaderboardData, setLeaderboardData] = useState([]);
+            const [isLeaderboardLoading, setIsLeaderboardLoading] = useState(false);
+            const [showLeaderboardModal, setShowLeaderboardModal] = useState(false);
+            // Perfil de usuario para el Leaderboard
+            const [userName, setUserName] = useState(''); 
 
             const joystickRef = useRef({ x: 0, y: 0, active: false });
             const joystickStickRef = useRef(null);
@@ -681,6 +734,7 @@
                 const unsubscribe = fb.onSnapshot(userDocRef, (docSnap) => {
                     if (docSnap.exists() && docSnap.data().name && docSnap.data().documentId) {
                         setIsRegistered(true);
+                        setUserName(docSnap.data().name); // Guardar el nombre para el Leaderboard
                         // Opcional: Actualizar el formulario si ya existe el registro
                         setRegForm({
                             name: docSnap.data().name || '',
@@ -689,6 +743,7 @@
                         console.log("Perfil de usuario cargado y registrado.");
                     } else {
                         setIsRegistered(false);
+                        setUserName('');
                         console.log("Usuario autenticado pero perfil no registrado.");
                     }
                 }, (error) => {
@@ -698,6 +753,57 @@
                 return () => unsubscribe();
             }, [authReady, userId, db, fb]);
             
+            // --- FETCH LEADERBOARD DATA ---
+            useEffect(() => {
+                if (!authReady || !db) return;
+                
+                setIsLeaderboardLoading(true);
+                
+                // Ruta pública para el Leaderboard
+                const leaderboardCol = fb.collection(db, `artifacts/${appId}/public/data/leaderboard`);
+                
+                // Advertencia: Al evitar orderBy() para el score, solo se puede mostrar el Top N 
+                // si se ordenan en el cliente, lo cual es ineficiente para grandes colecciones.
+                // Aquí usamos onSnapshot para obtener los datos y luego los ordenamos en React.
+
+                const unsubscribe = fb.onSnapshot(leaderboardCol, (snapshot) => {
+                    const scores = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    }));
+                    setLeaderboardData(scores);
+                    setIsLeaderboardLoading(false);
+                }, (error) => {
+                    console.error("Error fetching leaderboard:", error);
+                    setIsLeaderboardLoading(false);
+                });
+
+                return () => unsubscribe();
+            }, [authReady, db, fb]);
+
+
+            // --- FIREBASE ACTION: SUBMIT HIGH SCORE (PUBLIC DATA) ---
+            const submitHighScore = useCallback(async (finalScore) => {
+                if (!db || !userId || !userName || finalScore === 0) return;
+
+                try {
+                    const leaderboardCol = fb.collection(db, `artifacts/${appId}/public/data/leaderboard`);
+                    
+                    await fb.addDoc(leaderboardCol, {
+                        score: finalScore,
+                        name: userName,
+                        userId: userId,
+                        date: new Date().toISOString()
+                    });
+                    console.log("Puntuación enviada al Leaderboard.");
+
+                } catch (error) {
+                    // Si falla, el error más probable es por reglas de seguridad
+                    console.error("Fallo al enviar la puntuación (Reglas de Seguridad o Auth):", error);
+                }
+            }, [db, userId, userName, fb]);
+
+
             // --- FIREBASE ACTION: SAVE USER PROFILE (PRIVATE DATA) ---
             const saveUserProfile = useCallback(async (e) => {
                 e.preventDefault();
@@ -722,9 +828,9 @@
                         registrationDate: new Date().toISOString(),
                         userId: userId // Guardar el ID de Firebase para referencia
                     }, { merge: true });
+                    // setUserName se actualizará a través del onSnapshot
 
                     setShowRegistrationModal(false);
-                    // isRegistered se actualizará automáticamente por el onSnapshot
 
                 } catch (error) {
                     console.error("Error saving user profile:", error);
@@ -823,6 +929,11 @@
                setHighScore(h => Math.max(h, finalScore)); 
                setGameOverMsg(CUSTOM_MESSAGES[Math.floor(Math.random() * CUSTOM_MESSAGES.length)]);
                
+               // NUEVA LÓGICA: Enviar la puntuación al Leaderboard
+               if (isRegistered && finalScore > 0) {
+                   submitHighScore(finalScore);
+               }
+
                // GA GAME OVER
                const duration = (Date.now() - gameStartTime.current) / 1000;
                if (window.gtag) {
@@ -832,7 +943,7 @@
                         character_name: selectedChar
                     });
                 }
-            }, [selectedChar]);
+            }, [selectedChar, isRegistered, submitHighScore]);
             
             const togglePause = () => { 
                 if (blockPauseRef.current) return; 
@@ -1019,11 +1130,11 @@
                         )}
 
                         {/* SCREENS */}
-                        {(status !== 'PLAYING' || showRegistrationModal) && (
-                            <div className={`absolute inset-0 z-40 flex items-center justify-center ${status === 'SPLASH' && !showRegistrationModal ? 'bg-transparent' : 'bg-black/60 backdrop-blur-sm'}`} onClick={(e) => { if (status === 'PAUSED') togglePause(); }}>
+                        {(status !== 'PLAYING' || showRegistrationModal || showLeaderboardModal) && (
+                            <div className={`absolute inset-0 z-40 flex items-center justify-center ${status === 'SPLASH' && !showRegistrationModal && !showLeaderboardModal ? 'bg-transparent' : 'bg-black/60 backdrop-blur-sm'}`} onClick={(e) => { if (status === 'PAUSED') togglePause(); }}>
                                 
                                 {/* SPLASH SCREEN (NEW) */}
-                                {status === 'SPLASH' && !showRegistrationModal && (
+                                {status === 'SPLASH' && !showRegistrationModal && !showLeaderboardModal && (
                                     <div className="absolute inset-0 z-50 flex flex-col items-center justify-center cursor-pointer overflow-hidden" onClick={handleSplashClick}>
                                         
                                         <img 
@@ -1063,16 +1174,25 @@
                                         saveUserProfile={saveUserProfile} 
                                     />
                                 )}
+                                
+                                {/* LEADERBOARD MODAL */}
+                                {showLeaderboardModal && (
+                                    <LeaderboardModalComponent 
+                                        data={leaderboardData} 
+                                        onClose={() => setShowLeaderboardModal(false)} 
+                                        isLoading={isLeaderboardLoading}
+                                    />
+                                )}
 
 
-                                {status === 'PAUSED' && !showRegistrationModal && (
+                                {status === 'PAUSED' && !showRegistrationModal && !showLeaderboardModal && (
                                     <div className="flex flex-col items-center animate-in fade-in zoom-in duration-200 pointer-events-none">
                                         <h2 className="text-6xl text-brandYellow font-bold text-shadow-retro mb-4 animate-pulse">PAUSA</h2>
                                         <p className="text-white text-xl text-shadow-retro animate-bounce">TOCA PARA CONTINUAR</p>
                                     </div>
                                 )}
 
-                                {status === 'START' && !showRegistrationModal && (
+                                {status === 'START' && !showRegistrationModal && !showLeaderboardModal && (
                                     <div className={`absolute -inset-1 z-50 flex flex-col items-center justify-center p-6 text-white w-[calc(100%+8px)] h-[calc(100%+8px)] bg-black/10 backdrop-blur-sm`} onClick={(e) => e.stopPropagation()}>
                                         
                                         <img src={GAME_ASSETS.LOGO} alt="Marinero" className="w-48 object-contain mb-6 animate-logo-pulse" />
@@ -1117,11 +1237,18 @@
                                                     <div className="pixel-inner bg-brandYellow w-full h-full text-brandRed pixel-clip flex items-center justify-center group-hover:bg-yellow-300"><Play className="fill-current w-10 h-10" /></div>
                                                 </div>
                                             </button>
+                                            
+                                            {/* BOTÓN LEADERBOARD EN PANTALLA START */}
+                                            <button onClick={() => setShowLeaderboardModal(true)} className="btn-pixel-wrapper group active:translate-y-1 transition-transform mt-4 w-48">
+                                                <div className="bg-brandBlue p-1 pixel-clip shadow-[4px_4px_0px_0px_#1e293b]">
+                                                    <div className="pixel-inner bg-brandBlueLight w-full py-3 text-white font-bold text-xl pixel-clip flex items-center justify-center gap-3 group-hover:bg-blue-400"><Tally3 className="w-5 h-5" />RANKING</div>
+                                                </div>
+                                            </button>
                                         </div>
                                     </div>
                                 )}
 
-                                {status === 'GAME_OVER' && !showRegistrationModal && (
+                                {status === 'GAME_OVER' && !showRegistrationModal && !showLeaderboardModal && (
                                     <div className="w-full max-w-xs animate-in slide-in-from-bottom duration-500" onClick={(e) => e.stopPropagation()}>
                                         <div className="bg-brandBlue p-1 pixel-clip shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]">
                                             <div className="bg-white p-1 pixel-clip">
@@ -1147,9 +1274,16 @@
                                                         </div>
                                                     )}
 
-                                                    <button onClick={restartGame} className="btn-pixel-wrapper w-full group active:translate-y-1 transition-transform">
-                                                        <div className="bg-white p-1 pixel-clip shadow-[4px_4px_0px_0px_#7f1d1d]"><div className="pixel-inner bg-brandRed py-4 text-white font-bold text-2xl pixel-clip flex items-center justify-center gap-3 group-hover:bg-red-600"><RotateCcw className="w-8 h-8" />REINTENTAR</div></div>
-                                                    </button>
+                                                    <div className="flex flex-col gap-2 w-full">
+                                                        <button onClick={restartGame} className="btn-pixel-wrapper w-full group active:translate-y-1 transition-transform">
+                                                            <div className="bg-white p-1 pixel-clip shadow-[4px_4px_0px_0px_#7f1d1d]"><div className="pixel-inner bg-brandRed py-3 text-white font-bold text-2xl pixel-clip flex items-center justify-center gap-3 group-hover:bg-red-600"><RotateCcw className="w-8 h-8 mr-1" />REINTENTAR</div></div>
+                                                        </button>
+                                                        
+                                                        {/* BOTÓN LEADERBOARD EN PANTALLA GAME OVER */}
+                                                        <button onClick={() => setShowLeaderboardModal(true)} className="btn-pixel-wrapper w-full group active:translate-y-1 transition-transform">
+                                                            <div className="bg-white p-1 pixel-clip shadow-[4px_4px_0px_0px_#1e293b]"><div className="pixel-inner bg-brandBlue py-3 text-white font-bold text-2xl pixel-clip flex items-center justify-center gap-3 group-hover:bg-blue-600"><Tally3 className="w-8 h-8 mr-1" />RANKING</div></div>
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
